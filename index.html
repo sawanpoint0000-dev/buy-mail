@@ -5,7 +5,7 @@
 <title>TAMP.OTP</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 
-<style>
+<style>  
 :root{
   --bg:#0f1115;
   --card:#161a22;
@@ -234,15 +234,18 @@ db.ref("msg").on("child_added",s=>{
  r.innerHTML=`
  <button class="copy">COPY</button>
  <span class="mail">${mask(d.email)}</span>
- <input class="otp" disabled value="${d.otp||""}">
+ <input class="otp" ${isAdmin ? "" : "disabled"} value="${d.otp||""}">
  <span class="time">10:00</span>`;
  r.querySelector(".copy").onclick=()=>{
   navigator.clipboard.writeText(d.email);
  };
- list.prepend(r);
- timer(id,d.time,r.querySelector(".time"));
-});
+ let otpInput = r.querySelector(".otp");
 
+if(isAdmin){
+ otpInput.oninput = ()=>{
+  db.ref("msg/"+id+"/otp").set(otpInput.value);
+ };
+}
 /* OTP LIVE */
 db.ref("msg").on("child_changed",s=>{
  let r=document.getElementById(s.key);
