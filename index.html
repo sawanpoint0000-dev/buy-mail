@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>TAMP.OTP</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<style>
+:root{
+  --bg:#0f1115;
+  --card:#161a22;
+  --text:#e8eaf0;
+  --accent:#4f8cff;
+  --success:#22c55e;
+  --danger:#ef4444;
+}
+*{box-sizing:border-box}
+body{
+  margin:0;
+  background:#0b0e14;
+  color:#fff;
+  font-family:Inter,system-ui;
+}
+.hide{display:none}
+.card{
+  background:var(--card);
+  padding:14px;
+  border-radius:16px;
+  margin:12px;
+}
+input,button{
+  padding:10px;
+  border-radius:10px;
+  border:none;
+}
+button{cursor:pointer}
+.row{
+  display:flex;
+  gap:8px;
+  background:#10131a;
+  padding:10px;
+  border-radius:14px;
+  margin-bottom:8px;
+}
+.otp-input{width:80px;text-align:center}
+.menu{
+  position:absolute;
+  right:10px;
+  top:50px;
+  background:#161a22;
+  padding:14px;
+  border-radius:14px;
+  width:260px;
+}
+</style>
+</head>
+
+<body>
+
+<!-- AUTH -->
+<div class="card" id="authBox">
+<h3 id="authTitle">Login / Register</h3>
+<input id="authEmail" placeholder="Email"><br><br>
+<input id="authPass" placeholder="Password"><br><br>
+<button onclick="login()">Login</button>
+<button onclick="register()">Register</button>
+</div>
+
+<!-- NAV -->
+<div class="card hide" id="navbar">
+<b>TAMP.OTP</b>
+<button onclick="toggleMenu()">☰</button>
+<div class="menu hide" id="menu">
+<div>💰 Balance: ₹<b id="balance">0</b></div>
+<div>📦 Buy: <b id="buyCount">0</b></div>
+<div>✅ Success: <b id="successCount">0</b></div>
+<hr>
+<div id="adminOnly" class="hide">
+<h4>👮 Admin Panel</h4>
+<div id="userList"></div>
+</div>
+<hr>
+<button onclick="logout()" style="background:var(--danger);color:#fff;width:100%">Logout</button>
+</div>
+</div>
+
+<!-- ADMIN ADD MAIL -->
+<div class="card hide" id="adminMail">
+<input id="mailInput" placeholder="Add Email">
+<button onclick="addMail()">Add Mail</button>
+</div>
+
+<!-- BUY -->
+<div class="card hide" id="buyBox">
+<button onclick="buyMail()" style="background:var(--accent);color:#fff">
+BUY MAIL (₹1)
+</button>
+</div>
+
+<div id="chat"></div>
+
+<script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+<script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
+
+<script>
+firebase.initializeApp({
+  apiKey:"AIzaSyDi40uxY5aC8R3xqacPL393h67TuQ4RiVo",
+  databaseURL:"https://real-time-chat-box-179ea-default-rtdb.firebaseio.com"
+});
+const db=firebase.database();
+const PRICE=1;
+
+/* AUTH */
+let uid=localStorage.getItem("uid");
+let isAdmin=false;
+
+function register(){
+  if(!authEmail.value||!authPass.value) return alert("Fill all");
+  uid="u"+Date.now();
+  db.ref("users/"+uid).set({
+    email:authEmail.value,
+    pass:authPass.value,
+    balance:0,
+    buy:0,
+    success:0,
+    lastActive:Date.now()
+  });
+  localStorage.setItem("uid",uid);
+  location.reload();
+}
+function login(){
+  db.ref("users").once("value",s=>{
+    let ok=false;
+    s.forEach(u=>{
+      if(u.val().email===authEmail.value &&
+         u.val().pass===authPass.value){
+        uid=u.key;
+        ok=true;
+      }
+    });
+    if(!ok) return alert("Wrong Login");
+    localStorage.setItem("uid",uid);
+    location.reload();
+  });
+}
+function logout(){
+  localStorage.clear();
+  location.reload();
+}
+
+/* AUTO LOGIN */
+if(uid){
+  authBox.classList.add("hide");
+  navbar.classList.remove("hide");
+  buyBox.classList.remove("hide");
+  db.ref("users/"+uid+"/lastActive").set(Date.now());
+}
+
+/* ADMIN */
+if(uid==="admin"){
+  isAdmin=true;
+  adminOnly.classList.remove("hide");
+  adminMail.classList.remove("hide");
+}
+
+/* MENU */
+function toggleMenu(){menu.classList.toggle("hide")}
+
+/* USER DATA */
+db.ref("users/"+uid).on("value",s=>{
+  const d=s.val()||{};
+  balance.innerText=d.balance||0;
+  buyCount.innerText=d.buy||0;
+  successCount.innerText=d.success||0;
+});
+
+/* ADMIN – USERS */
+if(isAdmin){
+  db.ref("users").on("value",s=>{
+    userList.innerHTML="";
+    s.forEach(u=>{
+      const d=u.val();
+      userList.innerHTML+=`
+      <div style="font-size:12px;margin-bottom:6px">
+      ${d.email} | ₹${d.balance}
+      <button onclick="addMoney('${u.key}')">+₹</button>
+      </div>`;
+    });
+  });
+}
+function addMoney(id){
+  const amt=Number(prompt("Add INR"));
+  if(!amt) return;
+  db.ref("users/"+id+"/balance").transaction(b=>(b||0)+amt);
+}
+
+/* MAIL */
+function addMail(){
+  if(!mailInput.value) return;
+  db.ref("lot").push(mailInput.value);
+  mailInput.value="";
+}
+function buyMail(){
+  db.ref("users/"+uid+"/balance").once("value",s=>{
+    if((s.val()||0)<PRICE) return alert("No Balance");
+    db.ref("lot").limitToFirst(1).once("value",x=>{
+      if(!x.exists()) return alert("No Mail Left");
+      let mail,key;
+      x.forEach(m=>{mail=m.val();key=m.key});
+      db.ref("lot/"+key).remove();
+      db.ref("msg").push({email:mail,otp:"",user:uid});
+      db.ref("users/"+uid+"/balance").transaction(b=>b-PRICE);
+      db.ref("users/"+uid+"/buy").transaction(n=>(n||0)+1);
+    });
+  });
+}
+
+{
+  "email": "admin@tampotp.com",
+  "pass": "admin@123",
+  "balance": 0,
+  "buy": 0,
+  "success": 0,
+  "lastActive": 0
+}
+
+
+/* SHOW MAIL + OTP */
+db.ref("msg").on("child_added",s=>{
+  const d=s.val();
+  const row=document.createElement("div");
+  row.className="row";
+  const otpDisabled=isAdmin?"":"disabled";
+  row.innerHTML=`
+    <b>${d.email}</b>
+    <input class="otp-input" ${otpDisabled} value="${d.otp||""}">
+  `;
+  if(isAdmin){
+    row.querySelector("input").oninput=e=>{
+      db.ref("msg/"+s.key+"/otp").set(e.target.value);
+      db.ref("users/"+d.user+"/success").transaction(n=>(n||0)+1);
+    };
+  }
+  chat.prepend(row);
+});
+</script>
+</body>
+</html>
