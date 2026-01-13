@@ -4,72 +4,15 @@
 <meta charset="UTF-8">
 <title>TAMP.OTP</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-
-<style>  
-:root{
-  --bg:#0f1115;
-  --card:#161a22;
-  --text:#e8eaf0;
-  --accent:#4f8cff;
-  --success:#22c55e;
-  --danger:#ef4444;
-}
-*{box-sizing:border-box}
-body{
-  margin:0;
-  background:#0b0e14;
-  color:#fff;
-  font-family:Inter,system-ui;
-}
+<style>
+body{margin:0;background:#0b0e14;color:#fff;font-family:system-ui}
+.card{background:#161a22;margin:12px;padding:14px;border-radius:14px}
 .hide{display:none}
-.card{
-  background:var(--card);
-  padding:14px;
-  border-radius:16px;
-  margin:12px;
-}
-input,button{
-  padding:10px;
-  border-radius:10px;
-  border:none;
-}
+input,button{padding:10px;border-radius:8px;border:none}
 button{cursor:pointer}
-.row{
-  display:flex;
-  align-items:center;
-  gap:8px;
-  background:#10131a;
-  padding:10px;
-  border-radius:14px;
-  margin-bottom:8px;
-}
-.copy{
-  background:var(--success);
-  font-size:12px;
-}
-.mail{flex:1;font-weight:600}
-.otp{
-  width:90px;
-  text-align:center;
-  font-size:14px;
-  font-weight:700;
-  letter-spacing:2px;
-  background:#0f172a;
-  color:#22c55e;
-  border:2px solid #22c55e;
-  box-shadow:0 0 8px rgba(34,197,94,.6);
-}
-.otp:disabled{opacity:1}
-.time{font-size:12px;color:#f87171}
-.menu{
-  position:absolute;
-  right:10px;
-  top:50px;
-  background:#161a22;
-  padding:14px;
-  border-radius:14px;
-  width:260px;
-}
+.menu{background:#161a22;padding:12px;border-radius:12px}
+.row{background:#10131a;padding:10px;border-radius:12px;margin-bottom:8px;display:flex;gap:8px}
+.otp-input{width:80px;text-align:center;color:#22c55e;background:#0f172a;border:2px solid #22c55e;font-weight:700}
 </style>
 </head>
 
@@ -85,37 +28,34 @@ button{cursor:pointer}
 </div>
 
 <!-- NAV -->
-<div class="card hide" id="nav">
+<div class="card hide" id="app">
 <b>TAMP.OTP</b>
 <button onclick="menu.classList.toggle('hide')">☰</button>
+
 <div class="menu hide" id="menu">
 <div>💰 Balance ₹<b id="bal">0</b></div>
 <div>📦 Buy <b id="buy">0</b></div>
 <div>✅ Success <b id="succ">0</b></div>
 <hr>
 <div id="adminBox" class="hide">
-<h4>ADMIN</h4>
+<h4>Admin</h4>
 <div id="users"></div>
 </div>
 <hr>
-<button onclick="logout()" style="background:var(--danger);color:#fff;width:100%">Logout</button>
+<button onclick="logout()" style="background:#ef4444;color:#fff;width:100%">Logout</button>
 </div>
 </div>
 
-<!-- ADMIN ADD MAIL -->
-<div class="card hide" id="addMailBox">
-<input id="mailIn" placeholder="Add Mail">
+<div class="card hide" id="adminMail">
+<input id="mail" placeholder="Add Mail">
 <button onclick="addMail()">Add</button>
 </div>
 
-<!-- BUY -->
 <div class="card hide" id="buyBox">
-<button onclick="buyMail()" style="background:var(--accent);color:#fff">
-BUY MAIL ₹1
-</button>
+<button onclick="buyMail()">BUY MAIL (₹1)</button>
 </div>
 
-<div id="list"></div>
+<div id="chat"></div>
 
 <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
 <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
@@ -126,149 +66,150 @@ firebase.initializeApp({
   databaseURL:"https://real-time-chat-box-179ea-default-rtdb.firebaseio.com"
 });
 const db=firebase.database();
-const PRICE=1, EXPIRE=600000;
+const PRICE=1;
 
-let uid=localStorage.uid||"", isAdmin=false;
+const ADMIN_EMAIL="admin@tampotp.com";
+const ADMIN_PASS="admin@123";
 
-/* HELPERS */
-function mask(m){
- let a=m.indexOf("@");
- return m.slice(0,3)+"*****"+m.slice(a-2);
-}
+let uid=localStorage.getItem("uid");
+let isAdmin=false;
 
 /* AUTH */
 function register(){
- if(!email.value||!pass.value) return alert("Fill all");
- uid="u"+Date.now();
- db.ref("users/"+uid).set({
-  email:email.value,pass:pass.value,
-  balance:0,buy:0,success:0,blocked:false
- });
- localStorage.uid=uid; location.reload();
-}
-function login(){
- db.ref("users").once("value",s=>{
-  let ok=false;
-  s.forEach(u=>{
-   if(u.val().email===email.value && u.val().pass===pass.value){
-    uid=u.key; ok=true;
-   }
+  if(!email.value||!pass.value) return alert("Fill all");
+  uid="u"+Date.now();
+  db.ref("users/"+uid).set({
+    email:email.value, pass:pass.value,
+    balance:0, buy:0, success:0, lastActive:Date.now()
   });
-  if(!ok) return alert("Wrong Login");
-  localStorage.uid=uid; location.reload();
- });
+  localStorage.setItem("uid", uid);
+  location.reload();
 }
-function logout(){localStorage.clear();location.reload()}
 
-/* AUTO */
+function login(){
+  if(email.value===ADMIN_EMAIL && pass.value===ADMIN_PASS){
+    uid="ADMIN";
+    isAdmin=true;
+    localStorage.setItem("uid", uid);
+    localStorage.setItem("admin", "1");
+    location.reload();
+    return;
+  }
+  db.ref("users").once("value", s=>{
+    let ok=false;
+    s.forEach(u=>{
+      if(u.val().email===email.value && u.val().pass===pass.value){
+        uid=u.key; ok=true;
+      }
+    });
+    if(!ok) return alert("Wrong login");
+    localStorage.setItem("uid", uid);
+    location.reload();
+  });
+}
+
+function logout(){
+  localStorage.clear();
+  location.reload();
+}
+
+/* AUTO LOGIN */
 if(uid){
- authBox.classList.add("hide");
- nav.classList.remove("hide");
- buyBox.classList.remove("hide");
-}
-
-/* ADMIN */
-if(uid==="admin"){
- isAdmin=true;
- adminBox.classList.remove("hide");
- addMailBox.classList.remove("hide");
+  authBox.classList.add("hide");
+  app.classList.remove("hide");
+  buyBox.classList.remove("hide");
+  if(localStorage.getItem("admin")) isAdmin=true;
+  db.ref("users/"+uid+"/lastActive").set(Date.now());
 }
 
 /* USER DATA */
-db.ref("users/"+uid).on("value",s=>{
- let d=s.val()||{};
- if(d.blocked){alert("You are blocked");logout();}
- bal.innerText=d.balance||0;
- buy.innerText=d.buy||0;
- succ.innerText=d.success||0;
-});
-
-/* ADMIN USERS */
-if(isAdmin){
- db.ref("users").on("value",s=>{
-  users.innerHTML="";
-  s.forEach(u=>{
-   let d=u.val();
-   users.innerHTML+=`
-   <div style="font-size:12px">
-   ${d.email} ₹${d.balance}
-   <button onclick="money('${u.key}')">+₹</button>
-   <button onclick="block('${u.key}',${!d.blocked})">
-   ${d.blocked?"Unblock":"Block"}
-   </button></div>`;
+if(!isAdmin && uid){
+  db.ref("users/"+uid).on("value", s=>{
+    const d = s.val()||{};
+    bal.innerText=d.balance||0;
+    buy.innerText=d.buy||0;
+    succ.innerText=d.success||0;
   });
- });
 }
-function money(id){
- let a=+prompt("Add INR"); if(!a)return;
- db.ref("users/"+id+"/balance").transaction(b=>(b||0)+a);
+
+/* ADMIN PANEL */
+if(isAdmin){
+  adminBox.classList.remove("hide");
+  adminMail.classList.remove("hide");
+
+  db.ref("users").on("value", s=>{
+    users.innerHTML="";
+    s.forEach(u=>{
+      users.innerHTML+=`
+      <div style="font-size:12px">
+        ${u.val().email} ₹${u.val().balance}
+        <button onclick="addMoney('${u.key}')">+₹</button>
+      </div>`;
+    });
+  });
 }
-function block(id,v){
- db.ref("users/"+id+"/blocked").set(v);
+
+function addMoney(id){
+  const a=Number(prompt("Add INR"));
+  if(!a) return;
+  db.ref("users/"+id+"/balance").transaction(b=>(b||0)+a);
 }
 
 /* MAIL */
 function addMail(){
- if(!mailIn.value)return;
- db.ref("lot").push(mailIn.value); mailIn.value="";
-}
-function buyMail(){
- db.ref("users/"+uid+"/balance").once("value",s=>{
-  if((s.val()||0)<PRICE) return alert("No balance");
-  db.ref("lot").limitToFirst(1).once("value",x=>{
-   if(!x.exists()) return alert("No mail");
-   let m,k; x.forEach(i=>{m=i.val();k=i.key});
-   db.ref("lot/"+k).remove();
-   db.ref("msg").push({email:m,otp:"",time:Date.now(),user:uid});
-   db.ref("users/"+uid+"/balance").transaction(b=>b-PRICE);
-   db.ref("users/"+uid+"/buy").transaction(n=>(n||0)+1);
-  });
- });
+  if(!mail.value) return;
+  db.ref("lot").push(mail.value);
+  mail.value="";
 }
 
-/* SHOW */
-db.ref("msg").on("child_added",s=>{
- let d=s.val(),id=s.key;
- let r=document.createElement("div");
- r.className="row"; r.id=id;
- r.innerHTML=`
- <button class="copy">COPY</button>
- <span class="mail">${mask(d.email)}</span>
- <input class="otp" ${isAdmin ? "" : "disabled"} value="${d.otp||""}">
- <span class="time">10:00</span>`;
- r.querySelector(".copy").onclick=()=>{
-  navigator.clipboard.writeText(d.email);
- };
- list.prepend(r);
- timer(id,d.time,r.querySelector(".time"));
+function buyMail(){
+  db.ref("users/"+uid+"/balance").once("value", s=>{
+    if((s.val()||0)<PRICE) return alert("No balance");
+    db.ref("lot").limitToFirst(1).once("value", x=>{
+      if(!x.exists()) return alert("No mail");
+      let m,k;
+      x.forEach(v=>{m=v.val(); k=v.key;});
+      db.ref("lot/"+k).remove();
+      db.ref("msg").push({email:m, otp:"", user:uid, time:Date.now()});
+      db.ref("users/"+uid+"/balance").transaction(b=>b-PRICE);
+      db.ref("users/"+uid+"/buy").transaction(n=>(n||0)+1);
+    });
+  });
+}
+
+/* SHOW OTP */
+db.ref("msg").on("child_added", s=>{
+  const d = s.val();
+  const r = document.createElement("div");
+  r.className="row";
+  r.id = s.key;
+  r.innerHTML = `
+    <b>${d.email}</b>
+    <input class="otp-input" ${isAdmin?"":"disabled"} value="${d.otp||""}">
+  `;
+
+  // ADMIN OTP EDIT
+  if(isAdmin){
+    const otpInput = r.querySelector("input");
+    otpInput.oninput = e=>{
+      db.ref("msg/"+s.key+"/otp").set(e.target.value);
+      db.ref("users/"+d.user+"/success").transaction(n=>(n||0)+1);
+    };
+  }
+
+  chat.prepend(r);
 });
 
-/* OTP LIVE */
-db.ref("msg").on("child_changed",s=>{
- let r=document.getElementById(s.key);
- if(!r) return;
-
- // ❗ ADMIN typing overwrite मत करो
-if(isAdmin){
-  r.querySelector(".otp").oninput = e => {
-    db.ref("msg/"+id+"/otp").set(e.target.value);
-  };
-}
-
-/* TIMER */
-function timer(id,t,el){
- let x=setInterval(()=>{
-  let l=EXPIRE-(Date.now()-t);
-  if(l<=0){
-   clearInterval(x);
-   db.ref("msg/"+id).remove();
-   document.getElementById(id)?.remove();
+/* LIVE OTP FOR USERS */
+db.ref("msg").on("child_changed", s=>{
+  const r = document.getElementById(s.key);
+  if(!r) return;
+  const otpInput = r.querySelector("input");
+  if(!isAdmin){
+    otpInput.value = s.val().otp||"";
   }
-  el.innerText=
-   String(Math.floor(l/60000)).padStart(2,"0")+":"+
-   String(Math.floor(l/1000)%60).padStart(2,"0");
- },1000);
-}
+});
 </script>
+
 </body>
 </html>
