@@ -4,97 +4,30 @@
 <meta charset="UTF-8">
 <title>TAMP.OTP FINAL</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-
 <style>
-:root{
- --bg:#0b0e14;
- --card:#161a22;
- --soft:#10131a;
- --accent:#22c55e;
- --danger:#ef4444;
- --text:#fff;
-}
-*{box-sizing:border-box}
-body{
- margin:0;
- background:var(--bg);
- color:var(--text);
- font-family:system-ui;
-}
-.card{
- background:var(--card);
- margin:12px;
- padding:14px;
- border-radius:16px;
- box-shadow:0 0 20px rgba(0,0,0,.4);
-}
+body{margin:0;background:#0b0e14;color:#fff;font-family:system-ui}
+.card{background:#161a22;margin:12px;padding:14px;border-radius:14px}
 .hide{display:none}
-input,select,button{
- padding:10px;
- border-radius:10px;
- border:none;
- background:#0f1320;
- color:#fff;
-}
-input:focus,select:focus{
- outline:none;
- box-shadow:0 0 0 2px #22c55e55;
-}
+input,select,button{padding:10px;border-radius:8px;border:none}
 button{cursor:pointer}
-
-.row{
- background:var(--soft);
- padding:10px;
- border-radius:14px;
- margin-bottom:8px;
- display:flex;
- gap:8px;
- align-items:center;
- justify-content:space-between;
- transition:.2s;
-}
-.row:hover{background:#151a24}
-
-.copy{
- background:linear-gradient(135deg,#22c55e,#16a34a);
- color:#000;
- font-weight:600;
-}
-
-.buyNext{
- background:linear-gradient(135deg,#4f8cff,#2563eb);
- color:#fff;
- font-weight:600;
-}
-.buyNext:disabled{
- opacity:.4;
- cursor:not-allowed;
-}
-
+.row{background:#10131a;padding:10px;border-radius:12px;margin-bottom:8px;display:flex;gap:8px;align-items:center;justify-content:space-between}
+.copy{background:#22c55e;color:#000}
 .otp{
  width:80px;
  text-align:center;
- color:#f87171;
- background:#0f1320;
- border:1px solid var(--accent);
- border-radius:6px;
+ color:red;
+ background:#10131a;
+ border:1px solid #22c55e;
+ border-radius:4px;
  font-weight:700;
 }
+.time{font-size:12px;color:#f87171}
 
-.time{font-size:12px;color:#fca5a5}
-.topbar{
- display:flex;
- justify-content:space-between;
- align-items:center;
-}
-.logout{
- background:var(--danger);
- color:#fff;
- font-weight:600;
-}
+/* EXTRA UI – ADD ONLY */
+.row:hover{background:#151a24}
+button:disabled{opacity:.5;cursor:not-allowed}
 </style>
 </head>
-
 <body>
 
 <!-- AUTH -->
@@ -109,9 +42,9 @@ button{cursor:pointer}
 <!-- APP -->
 <div id="app" class="hide">
 
-<div class="card topbar">
+<div class="card">
 <b>TAMP.OTP</b>
-<button class="logout" onclick="logout()">Logout</button>
+<button onclick="logout()" style="float:right;background:#ef4444;color:#fff">Logout</button>
 </div>
 
 <!-- ADMIN -->
@@ -225,7 +158,7 @@ function addDomain(){
  newDomain.value="";
 }
 
-/* ADD MAIL (ADMIN) */
+/* ADD MAIL */
 function addMail(){
  let k=adminDomain.value,v=adminMail.value.trim();
  if(!k||!v) return alert("Fill all");
@@ -239,7 +172,7 @@ function addMail(){
  });
 }
 
-/* USER BALANCE */
+/* USER BALANCE + BLOCK CHECK */
 db.ref("users/"+uid).on("value",s=>{
  if(s.exists()){
   bal.innerText=s.val().balance||0;
@@ -247,23 +180,49 @@ db.ref("users/"+uid).on("value",s=>{
  }
 });
 
-/* BUY FIRST MAIL */
+/* ADMIN USER CONTROL – ADD ONLY */
+if(isAdmin){
+ db.ref("users").on("value",s=>{
+  users.innerHTML="";
+  s.forEach(u=>{
+   if(u.key==="admin") return;
+   let d=u.val();
+   users.innerHTML+=`
+    <div style="font-size:12px;margin-bottom:6px">
+     <b>${d.email}</b><br>
+     ID: ${u.key}<br>
+     Balance: ₹${d.balance||0}<br>
+     <button onclick="addUserBalance('${u.key}')">Add Balance</button>
+     <button onclick="blockUser('${u.key}',${!d.blocked})">
+      ${d.blocked?"Unblock":"Block"}
+     </button>
+     <hr>
+    </div>`;
+  });
+ });
+}
+
+function addUserBalance(id){
+ let amt=+prompt("Add INR");
+ if(!amt||amt<=0) return;
+ db.ref("users/"+id+"/balance").transaction(b=>(b||0)+amt);
+}
+function blockUser(id,v){
+ db.ref("users/"+id+"/blocked").set(v);
+}
+
+/* BUY MAIL */
 function buyMail(){
  let k=userDomain.value;
  if(!k) return alert("Select domain");
- buyNextSameDomain(k);
-}
-
-/* BUY NEXT SAME DOMAIN (SEQUENCE) */
-function buyNextSameDomain(domainKey,btn){
  db.ref("users/"+uid+"/balance").once("value",s=>{
   if((s.val()||0)<PRICE) return alert("No balance");
-  db.ref("mails/"+domainKey).orderByKey().limitToFirst(1).once("value",x=>{
-   if(!x.exists()) return alert("No mail in domain");
+  db.ref("mails/"+k).limitToFirst(1).once("value",x=>{
+   if(!x.exists()) return alert("No mail");
    let key;
    x.forEach(m=>key=m.key);
-   db.ref("mails/"+domainKey+"/"+key).remove();
-   db.ref("domains/"+domainKey+"/stock").transaction(n=>(n||0)-1);
+   db.ref("mails/"+k+"/"+key).remove();
+   db.ref("domains/"+k+"/stock").transaction(n=>(n||0)-1);
    db.ref("msg").push({
     email:key.replace(/_/g,"."),
     user:uid,
@@ -271,48 +230,32 @@ function buyNextSameDomain(domainKey,btn){
     otp:""
    });
    db.ref("users/"+uid+"/balance").transaction(b=>b-PRICE);
-   if(btn) btn.disabled=true;
   });
  });
 }
 
-/* SHOW MAILS */
+/* SHOW MAIL + OTP + TIMER */
 db.ref("msg").on("child_added",s=>{
  let d=s.val();
  if(d.user!==uid && !isAdmin) return;
-
  let r=document.createElement("div");
  r.className="row";
- let domainKey=d.email.split("@")[1].replace(".","_");
-
  r.innerHTML=`
  <button class="copy">Copy</button>
  <span>${d.email.replace(/^(.{3}).*(.{2}@)/,"$1*****$2")}</span>
  <input class="otp" ${isAdmin?"":"disabled"}>
- <span class="time">10:00</span>
- <button class="buyNext">Buy Next</button>
- `;
-
+ <span class="time">10:00</span>`;
  r.querySelector(".copy").onclick=()=>navigator.clipboard.writeText(d.email);
-
  if(isAdmin){
-  r.querySelector(".otp").oninput=e=>
-   db.ref("msg/"+s.key+"/otp").set(e.target.value);
+  r.querySelector(".otp").oninput=e=>db.ref("msg/"+s.key+"/otp").set(e.target.value);
  }
-
  db.ref("msg/"+s.key+"/otp").on("value",snap=>{
   r.querySelector(".otp").value=snap.val()||"";
  });
-
- r.querySelector(".buyNext").onclick=()=>{
-  buyNextSameDomain(domainKey,r.querySelector(".buyNext"));
- };
-
  list.prepend(r);
  startTimer(d.time,r.querySelector(".time"),s.key);
 });
 
-/* TIMER */
 function startTimer(t,el,id){
  let x=setInterval(()=>{
   let l=EXPIRE-(Date.now()-t);
